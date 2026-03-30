@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { addPot, updatePot, deletePot, updateAccount, addTransaction } from '../lib/db'
-import { smartAllocate, fmt } from '../lib/allocation'
+import { addPot, updatePot, deletePot, addTransaction } from '../lib/db'
+import { fmt } from '../lib/allocation'
 import PotModal from './PotModal'
 import TopUpModal from './TopUpModal'
 
@@ -25,14 +25,10 @@ export default function PotsTab({ uid, pots, accounts }) {
   }
 
   async function handleTopUp(pot, amount, allocs) {
-    // Deduct from each account
-    for (const { account, deduct } of allocs) {
-      await updateAccount(uid, account.id, { balance: account.balance - deduct })
-    }
-    // Add to pot
+    // Account balances are never mutated — they are the user's reference values.
+    // Deductions are virtual projections tracked via transactions.
     const newSaved = Math.min(pot.target, pot.saved + amount)
     await updatePot(uid, pot.id, { saved: newSaved })
-    // Record transaction
     await addTransaction(uid, {
       potId: pot.id,
       potName: pot.name,

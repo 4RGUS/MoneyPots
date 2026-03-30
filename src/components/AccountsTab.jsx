@@ -26,7 +26,11 @@ export default function AccountsTab({ uid, accounts }) {
     <>
       <div className="accounts-list">
         {accounts.map(acc => {
-          const avail = availableBalance(acc)
+          // rawBalance = user-entered value (never mutated by pot allocations)
+          // acc.balance = rawBalance minus already-committed pot amounts
+          const rawBalance = acc.rawBalance ?? acc.balance
+          const inPots = rawBalance - acc.balance   // amount committed to active pots
+          const avail = availableBalance(acc)        // free for new pots (after min balance)
           return (
             <div className="card acc-card" key={acc.id}>
               <div
@@ -52,9 +56,19 @@ export default function AccountsTab({ uid, accounts }) {
               </div>
 
               <div className="acc-right">
-                <div className="acc-balance">{fmt(acc.balance)}</div>
-                <div className={`acc-avail ${avail > 0 ? 'ok' : 'low'}`}>
-                  Available: {fmt(avail)}
+                <div className="acc-balance">{fmt(rawBalance)}</div>
+                {inPots > 0 && (
+                  <div style={{ fontSize: 12, color: '#A32D2D', marginTop: 2 }}>
+                    In pots: − {fmt(inPots)}
+                  </div>
+                )}
+                {inPots > 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: 1 }}>
+                    After pots: {fmt(acc.balance)}
+                  </div>
+                )}
+                <div className={`acc-avail ${avail > 0 ? 'ok' : 'low'}`} style={{ marginTop: inPots > 0 ? 4 : 2 }}>
+                  Free for pots: {fmt(avail)}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
                   <button className="btn btn-sm" onClick={() => setEditAcc(acc)}>Edit</button>

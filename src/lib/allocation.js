@@ -42,3 +42,39 @@ export function availableBalance(account) {
 export function fmt(n) {
   return '₹' + Math.round(n).toLocaleString('en-IN')
 }
+
+/**
+ * Computes how much of each account's balance is committed to active pots,
+ * counting transactions newest-first and stopping once each pot's current
+ * `saved` amount is fully explained. This prevents double-counting when a
+ * pot has been reset and topped up again.
+ *
+ * @param {Array} pots - live pot objects (must have id, saved)
+ * @param {Array} transactions - sorted DESC by createdAt (newest first)
+ * @returns {{ [accountId]: number }} committed amount per account
+ */
+export function computeCommitted(pots, transactions) {
+  const toExplain = {}
+  for (const p of pots) {
+    if (p.saved > 0) toExplain[p.id] = p.saved
+  }
+
+  const committed = {}
+
+  for (const txn of transactions) {
+    const remaining = toExplain[txn.potId]
+    if (!remaining) continue                          // inactive or fully explained
+
+    const contribution = Math.min(txn.amount, remaining)
+    const scale = txn.amount > 0 ? contribution / txn.amount : 0
+
+    for (const s of txn.sources ?? []) {
+      committed[s.accountId] = (committed[s.accountId] || 0) + s.deduct * scale
+    }
+
+    toExplain[txn.potId] -= contribution
+    if (toExplain[txn.potId] <= 0) delete toExplain[txn.potId]
+  }
+
+  return committed
+}

@@ -8,15 +8,17 @@ export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
   const remaining = pot.target - pot.saved
 
   const { allocs, shortfall, totalAvailable } = useMemo(() => {
-    const val = parseFloat(amount) || 0
+    const raw = parseFloat(amount) || 0
+    const val = Math.min(raw, remaining)   // never allocate more than the pot needs
     if (val <= 0) return { allocs: [], shortfall: 0, totalAvailable: 0 }
     const result = smartAllocate(accounts, val)
     const totalAvailable = accounts.reduce((s, a) => s + availableBalance(a), 0)
     return { ...result, totalAvailable }
-  }, [amount, accounts])
+  }, [amount, accounts, remaining])
 
   const parsedAmount = parseFloat(amount) || 0
-  const actualAmount = parsedAmount - shortfall
+  const cappedAmount = Math.min(parsedAmount, remaining)
+  const actualAmount = cappedAmount - shortfall
 
   async function handleConfirm() {
     if (parsedAmount <= 0 || allocs.length === 0) return
@@ -35,10 +37,14 @@ export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
             <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 2 }}>Saved</div>
             <div style={{ fontFamily: 'Fraunces, serif', fontSize: 18 }}>{fmt(pot.saved)}</div>
           </div>
-          <div style={{ flex: 1, background: 'var(--sand)', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 2 }}>Still needed</div>
+          <button
+            style={{ flex: 1, background: 'var(--sand)', borderRadius: 8, padding: '10px 14px', border: '1.5px dashed var(--border-med)', cursor: 'pointer', textAlign: 'left' }}
+            onClick={() => setAmount(String(remaining))}
+            title="Click to fill remaining amount"
+          >
+            <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 2 }}>Still needed ↵</div>
             <div style={{ fontFamily: 'Fraunces, serif', fontSize: 18 }}>{fmt(remaining)}</div>
-          </div>
+          </button>
         </div>
 
         <div className="field">
@@ -63,7 +69,9 @@ export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
                 <div className="topup-info">
                   {shortfall > 0
                     ? `⚠️ Only ${fmt(actualAmount)} available across all accounts. Shortfall: ${fmt(shortfall)}.`
-                    : `Smart allocation — highest available balance debited first.`}
+                    : parsedAmount > remaining
+                      ? `Amount capped to remaining goal (${fmt(remaining)}). Smart allocation applied.`
+                      : `Smart allocation — highest available balance debited first.`}
                 </div>
                 {allocs.map(({ account, deduct }) => (
                   <div className="source-row active" key={account.id}>
