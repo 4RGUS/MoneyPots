@@ -7,6 +7,23 @@ export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
 
   const remaining = pot.target - pot.saved
 
+  // Fixed rates from total goal duration + catch-up amount if behind
+  const { fixedDaily, fixedMonthly, catchUp } = useMemo(() => {
+    if (!pot.deadline || !pot.createdAt) return {}
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const end = new Date(pot.deadline)
+    const daysLeft = Math.round((end - today) / 86400000)
+    if (daysLeft <= 0) return {}
+    const created = new Date(pot.createdAt.toDate()); created.setHours(0, 0, 0, 0)
+    const totalDays = Math.max(1, Math.round((end - created) / 86400000))
+    const elapsed   = Math.max(0, Math.round((today - created) / 86400000))
+    const fixedDaily   = Math.ceil(pot.target / totalDays)
+    const fixedMonthly = Math.ceil(pot.target / (totalDays / 30.44))
+    const expectedSaved = (elapsed / totalDays) * pot.target
+    const behind = Math.ceil(expectedSaved - pot.saved)
+    return { fixedDaily, fixedMonthly, catchUp: behind > 0 ? behind : null }
+  }, [pot.deadline, pot.createdAt, pot.target, pot.saved])
+
   const { allocs, shortfall, totalAvailable } = useMemo(() => {
     const raw = parseFloat(amount) || 0
     const val = Math.min(raw, remaining)   // never allocate more than the pot needs
@@ -46,6 +63,29 @@ export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
             <div style={{ fontFamily: 'Fraunces, serif', fontSize: 18 }}>{fmt(remaining)}</div>
           </button>
         </div>
+
+        {(fixedDaily || fixedMonthly || catchUp) && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
+            {fixedMonthly && (
+              <button className="topup-quick-btn" onClick={() => setAmount(String(fixedMonthly))}>
+                <span className="topup-quick-label">Monthly target</span>
+                <span className="topup-quick-value">{fmt(fixedMonthly)}</span>
+              </button>
+            )}
+            {fixedDaily && (
+              <button className="topup-quick-btn" onClick={() => setAmount(String(fixedDaily))}>
+                <span className="topup-quick-label">Daily target</span>
+                <span className="topup-quick-value">{fmt(fixedDaily)}</span>
+              </button>
+            )}
+            {catchUp && (
+              <button className="topup-quick-btn" onClick={() => setAmount(String(catchUp))} style={{ borderColor: '#A32D2D' }}>
+                <span className="topup-quick-label" style={{ color: '#A32D2D' }}>Catch up</span>
+                <span className="topup-quick-value" style={{ color: '#A32D2D' }}>{fmt(catchUp)}</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="field">
           <label>Amount to add (₹)</label>

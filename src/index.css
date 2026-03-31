@@ -175,6 +175,30 @@ h3 { font-size: 1.1rem; }
 
 .pot-actions { display: flex; gap: 8px; }
 
+.pot-deadline {
+  font-size: 12px;
+  color: var(--ink-muted);
+  background: var(--sand);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  margin-bottom: 10px;
+}
+.pot-deadline.overdue { background: #FDECEA; color: #A32D2D; }
+.pot-deadline.behind  { background: #FEF3E2; }
+.deadline-status.ok     { color: #3B6D11; font-weight: 500; }
+.deadline-status.behind { color: #A05C00; font-weight: 500; }
+.deadline-rate-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  color: var(--clay-dark);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
 /* ── Add pot card ──────────────────────────────────────────────────── */
 .add-card {
   border: 1.5px dashed var(--border-med);
@@ -303,6 +327,25 @@ h3 { font-size: 1.1rem; }
 .icon-option:hover { background: var(--clay-pale); border-color: var(--border-med); }
 .icon-option.selected { background: var(--clay-light); border-color: var(--clay); }
 
+/* ── Top-up quick-fill buttons ──────────────────────────────────────── */
+.topup-quick-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1.5px dashed var(--border-med);
+  border-radius: var(--radius-sm);
+  background: white;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+.topup-quick-btn:hover { background: var(--clay-pale); border-color: var(--clay); }
+.topup-quick-label { font-size: 11px; color: var(--ink-muted); }
+.topup-quick-value { font-family: 'Fraunces', serif; font-size: 16px; color: var(--ink); }
+
 /* ── Top-up modal specifics ─────────────────────────────────────────── */
 .topup-info {
   font-size: 13px;
@@ -380,6 +423,46 @@ h3 { font-size: 1.1rem; }
   color: var(--ink-muted);
 }
 .empty-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+
+/* ── Spending summary ───────────────────────────────────────────────── */
+.spend-summary-cell {
+  flex: 1;
+  padding: 1rem 1.25rem;
+  text-align: center;
+}
+.spend-summary-label {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+.spend-summary-amount {
+  font-family: 'Fraunces', serif;
+  font-size: 1.3rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+.spend-summary-divider {
+  width: 1px;
+  background: var(--border);
+  margin: 0.75rem 0;
+}
+.min-bal-toggle {
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  padding: 4px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border-med);
+  background: white;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.min-bal-toggle.active {
+  background: var(--clay-light);
+  border-color: var(--clay);
+  color: var(--clay-dark);
+  font-weight: 500;
+}
 
 /* ── Overview tab ───────────────────────────────────────────────────── */
 .overview-row {

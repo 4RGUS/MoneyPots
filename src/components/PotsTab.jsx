@@ -8,6 +8,7 @@ export default function PotsTab({ uid, pots, accounts }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editPot, setEditPot] = useState(null)
   const [topUpPot, setTopUpPot] = useState(null)
+  const [rateMode, setRateMode] = useState('month') // 'month' | 'day'
 
   async function handleAdd(data) {
     await addPot(uid, data)
@@ -42,8 +43,34 @@ export default function PotsTab({ uid, pots, accounts }) {
     <>
       <div className="card-grid">
         {pots.map(pot => {
-          const pct = Math.min(100, Math.round((pot.saved / pot.target) * 100))
+          const rawPct = pot.target > 0 ? (pot.saved / pot.target) * 100 : 0
+          const pct = Math.min(100, Math.round(rawPct))
+          const pctLabel = rawPct > 0 && rawPct < 1 ? `${rawPct.toFixed(1)}%` : `${pct}%`
           const done = pct >= 100
+
+          // Deadline calculations — fixed rates based on total goal duration
+          let daysLeft = null, fixedDaily = null, fixedMonthly = null
+          let overdue = false, onTrack = null, behindBy = 0
+          if (pot.deadline && !done) {
+            const today = new Date(); today.setHours(0, 0, 0, 0)
+            const end = new Date(pot.deadline)
+            daysLeft = Math.round((end - today) / 86400000)
+            overdue = daysLeft < 0
+            if (!overdue) {
+              const createdDate = pot.createdAt?.toDate?.()
+              if (createdDate) {
+                const created = new Date(createdDate); created.setHours(0, 0, 0, 0)
+                const totalDays = Math.max(1, Math.round((end - created) / 86400000))
+                const elapsed   = Math.max(0, Math.round((today - created) / 86400000))
+                fixedDaily   = Math.ceil(pot.target / totalDays)
+                fixedMonthly = Math.ceil(pot.target / (totalDays / 30.44))
+                const expectedSaved = (elapsed / totalDays) * pot.target
+                onTrack  = pot.saved >= expectedSaved
+                behindBy = Math.max(0, Math.ceil(expectedSaved - pot.saved))
+              }
+            }
+          }
+
           return (
             <div className="card pot-card" key={pot.id}>
               <div className="pot-head">
@@ -52,13 +79,13 @@ export default function PotsTab({ uid, pots, accounts }) {
                   <div className="pot-title">{pot.name}</div>
                   <div className="pot-subtitle">Goal: {fmt(pot.target)}</div>
                 </div>
-                <span className={`pot-pct-badge ${done ? 'done' : ''}`}>{pct}%</span>
+                <span className={`pot-pct-badge ${done ? 'done' : ''}`}>{pctLabel}</span>
               </div>
 
               <div className="progress-track">
                 <div
                   className={`progress-fill ${done ? 'done' : ''}`}
-                  style={{ width: `${pct}%` }}
+                  style={{ width: pot.saved > 0 ? `max(2%, ${Math.min(100, rawPct)}%)` : '0%' }}
                 />
               </div>
 
@@ -66,6 +93,33 @@ export default function PotsTab({ uid, pots, accounts }) {
                 <span className="pot-saved">{fmt(pot.saved)}</span>
                 <span className="pot-of">of {fmt(pot.target)}</span>
               </div>
+
+              {pot.deadline && !done && (
+                <div className={`pot-deadline ${overdue ? 'overdue' : onTrack === false ? 'behind' : ''}`}>
+                  {overdue
+                    ? `⚠ Overdue by ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? 's' : ''}`
+                    : daysLeft === 0
+                      ? '⏰ Due today'
+                      : <>
+                          {`📅 ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left`}
+                          {fixedDaily && (
+                            <>
+                              {' · '}
+                              <button
+                                className="deadline-rate-toggle"
+                                onClick={() => setRateMode(m => m === 'month' ? 'day' : 'month')}
+                                title="Switch between per month / per day"
+                              >
+                                {rateMode === 'month' ? `${fmt(fixedMonthly)}/mo` : `${fmt(fixedDaily)}/day`}
+                              </button>
+                            </>
+                          )}
+                          {onTrack === true  && <span className="deadline-status ok"> · ✓ On track</span>}
+                          {onTrack === false && <span className="deadline-status behind"> · ↑ {fmt(behindBy)} to catch up</span>}
+                        </>
+                  }
+                </div>
+              )}
 
               <div className="pot-actions">
                 {!done && (

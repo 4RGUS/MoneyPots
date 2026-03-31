@@ -9,12 +9,25 @@ export default function PotModal({ title, initial, onSave, onClose }) {
   const [saved, setSaved] = useState(initial?.saved ?? 0)
   const [icon, setIcon] = useState(initial?.icon ?? ICONS[0])
   const [color, setColor] = useState(initial?.color ?? COLORS[0])
+  const [deadline, setDeadline] = useState(initial?.deadline ?? '')
   const [loading, setLoading] = useState(false)
+
+  // Minimum selectable date is tomorrow
+  const minDate = new Date()
+  minDate.setDate(minDate.getDate() + 1)
+  const minDateStr = minDate.toISOString().slice(0, 10)
 
   async function handleSave() {
     if (!name.trim() || !target) return
     setLoading(true)
-    await onSave({ name: name.trim(), target: parseFloat(target), saved: parseFloat(saved) || 0, icon, color })
+    await onSave({
+      name: name.trim(),
+      target: parseFloat(target),
+      saved: parseFloat(saved) || 0,
+      icon,
+      color,
+      deadline: deadline || null,
+    })
     setLoading(false)
   }
 
@@ -39,6 +52,16 @@ export default function PotModal({ title, initial, onSave, onClose }) {
             <input type="number" value={saved} onChange={e => setSaved(e.target.value)} />
           </div>
         )}
+
+        <div className="field">
+          <label>Complete by (optional)</label>
+          <input
+            type="date"
+            value={deadline}
+            min={minDateStr}
+            onChange={e => setDeadline(e.target.value)}
+          />
+        </div>
 
         <div className="field">
           <label>Icon</label>

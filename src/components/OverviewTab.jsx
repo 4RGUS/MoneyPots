@@ -1,47 +1,44 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { fmt } from '../lib/allocation'
 
 export default function OverviewTab({ pots, accounts, transactions }) {
-  // Pots with saved > 0 are the source of truth for what's "active"
-  const activePotIds = useMemo(
-    () => new Set(pots.filter(p => p.saved > 0).map(p => p.id)),
-    [pots]
-  )
-
   // Walk transactions newest→oldest and only accumulate up to pot.saved for each pot.
   // This ensures that if a pot was reset and topped up again, only the most recent
   // top-ups (that explain the current saved amount) are counted.
   const { potBreakdown, accountBreakdown } = useMemo(() => {
-    const potMeta = {}
-    for (const p of pots) potMeta[p.id] = p
-
-    const accMeta = {}
-    for (const a of accounts) accMeta[a.id] = a
-
-    // Per-pot working state
+    // Per-pot working state — include ALL pots
     const potData = {}
-    for (const potId of activePotIds) {
-      const meta = potMeta[potId]
-      if (!meta) continue
-      potData[potId] = {
-        id: potId,
-        name: meta.name,
-        icon: meta.icon ?? '🏺',
-        color: meta.color ?? '#A0623A',
-        saved: meta.saved,
-        target: meta.target,
+    for (const p of pots) {
+      potData[p.id] = {
+        id: p.id,
+        name: p.name,
+        icon: p.icon ?? '🏺',
+        color: p.color ?? '#A0623A',
+        saved: p.saved,
+        target: p.target,
         sources: {},
-        toExplain: meta.saved,   // how much of saved is still unaccounted for
+        toExplain: p.saved,   // how much of saved is still unaccounted for
       }
     }
 
-    // Per-account working state
+    // Per-account working state — include ALL accounts upfront
     const accData = {}
+    for (const a of accounts) {
+      accData[a.id] = {
+        id: a.id,
+        name: a.name,
+        bank: a.bank ?? '',
+        type: a.type ?? '',
+        balance: a.balance ?? 0,
+        totalDeducted: 0,
+        deductions: {},
+      }
+    }
 
     // Transactions arrive DESC (newest first) from Firestore
     for (const txn of transactions) {
       const pot = potData[txn.potId]
-      if (!pot || pot.toExplain <= 0) continue   // inactive or fully explained
+      if (!pot || pot.toExplain <= 0) continue   // unknown pot or fully explained
 
       // Only count the portion of this transaction that's still needed
       const contribution = Math.min(txn.amount, pot.toExplain)
@@ -57,44 +54,38 @@ export default function OverviewTab({ pots, accounts, transactions }) {
         pot.sources[s.accountId].total += effectiveDeduct
 
         // Account deductions
-        if (!accData[s.accountId]) {
-          const meta = accMeta[s.accountId] || {}
-          accData[s.accountId] = {
-            id: s.accountId,
-            name: s.accountName,
-            bank: meta.bank ?? '',
-            type: meta.type ?? '',
-            balance: meta.balance ?? 0,
-            totalDeducted: 0,
-            deductions: {},
+        const acc = accData[s.accountId]
+        if (acc) {
+          if (!acc.deductions[txn.potId]) {
+            acc.deductions[txn.potId] = { potName: txn.potName, total: 0 }
           }
+          acc.deductions[txn.potId].total += effectiveDeduct
+          acc.totalDeducted += effectiveDeduct
         }
-        if (!accData[s.accountId].deductions[txn.potId]) {
-          accData[s.accountId].deductions[txn.potId] = { potName: txn.potName, total: 0 }
-        }
-        accData[s.accountId].deductions[txn.potId].total += effectiveDeduct
-        accData[s.accountId].totalDeducted += effectiveDeduct
       }
 
       pot.toExplain -= contribution
     }
 
-    // Sync current balance from live accounts data
-    for (const acc of accounts) {
-      if (accData[acc.id]) accData[acc.id].balance = acc.balance
-    }
-
     return {
-      potBreakdown: Object.values(potData).filter(p => Object.keys(p.sources).length > 0),
-      accountBreakdown: Object.values(accData).filter(a => a.totalDeducted > 0),
+      potBreakdown: Object.values(potData),
+      accountBreakdown: Object.values(accData),
     }
-  }, [pots, accounts, transactions, activePotIds])
+  }, [pots, accounts, transactions])
 
-  if (potBreakdown.length === 0 && accountBreakdown.length === 0) {
+  const [deductMinBal, setDeductMinBal] = useState(true)
+
+  // Spending summary
+  const totalBalance = accounts.reduce((s, a) => s + (a.balance || 0), 0)
+  const totalMinBalance = accounts.reduce((s, a) => s + (a.minBalance || 0), 0)
+  const totalCommitted = accountBreakdown.reduce((s, a) => s + a.totalDeducted, 0)
+  const freeToSpend = totalBalance - totalCommitted - (deductMinBal ? totalMinBalance : 0)
+
+  if (pots.length === 0 && accounts.length === 0) {
     return (
       <div className="empty">
         <div className="empty-icon">📊</div>
-        <p>No allocations yet. Top up a pot to see your overview.</p>
+        <p>No pots or accounts yet. Add some to see your overview.</p>
       </div>
     )
   }
@@ -102,12 +93,44 @@ export default function OverviewTab({ pots, accounts, transactions }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
+      {/* ── Spending summary ──────────────────────────────────────── */}
+      <div className="card">
+        <div style={{ display: 'flex', gap: '0' }}>
+          <div className="spend-summary-cell">
+            <div className="spend-summary-label">Total balance</div>
+            <div className="spend-summary-amount">{fmt(totalBalance)}</div>
+          </div>
+          <div className="spend-summary-divider" />
+          <div className="spend-summary-cell">
+            <div className="spend-summary-label">Locked in pots</div>
+            <div className="spend-summary-amount" style={{ color: '#A32D2D' }}>− {fmt(totalCommitted)}</div>
+          </div>
+          <div className="spend-summary-divider" />
+          <div className="spend-summary-cell">
+            <div className="spend-summary-label">Free to spend</div>
+            <div className="spend-summary-amount" style={{ color: '#3B6D11' }}>{fmt(freeToSpend)}</div>
+          </div>
+        </div>
+        {totalMinBalance > 0 && (
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.75rem', paddingTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <button
+              className={`min-bal-toggle ${deductMinBal ? 'active' : ''}`}
+              onClick={() => setDeductMinBal(v => !v)}
+            >
+              {deductMinBal ? '✓' : ''} Deduct min. balance {deductMinBal ? `(−${fmt(totalMinBalance)})` : `(${fmt(totalMinBalance)})`}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* ── Goals breakdown ───────────────────────────────────────── */}
       <section>
         <h2 style={{ marginBottom: '1rem' }}>Goals breakdown</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {potBreakdown.map(pot => {
-            const pct = pot.target > 0 ? Math.min(100, Math.round((pot.saved / pot.target) * 100)) : 0
+            const rawPct = pot.target > 0 ? (pot.saved / pot.target) * 100 : 0
+            const pct = Math.min(100, Math.round(rawPct))
+            const pctLabel = rawPct > 0 && rawPct < 1 ? `${rawPct.toFixed(1)}%` : `${pct}%`
             const isDone = pct >= 100
             return (
               <div key={pot.id} className="card">
@@ -119,21 +142,25 @@ export default function OverviewTab({ pots, accounts, transactions }) {
                       {fmt(pot.saved)} saved · target {fmt(pot.target)}
                     </div>
                   </div>
-                  <span className={`pot-pct-badge${isDone ? ' done' : ''}`}>{pct}%</span>
+                  <span className={`pot-pct-badge${isDone ? ' done' : ''}`}>{pctLabel}</span>
                 </div>
 
                 <div className="progress-track" style={{ marginBottom: '1rem' }}>
-                  <div className={`progress-fill${isDone ? ' done' : ''}`} style={{ width: `${pct}%` }} />
+                  <div className={`progress-fill${isDone ? ' done' : ''}`} style={{ width: pot.saved > 0 ? `max(2%, ${Math.min(100, rawPct)}%)` : '0%' }} />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {Object.values(pot.sources).map((s, i) => (
-                    <div key={i} className="overview-row">
-                      <span className="overview-label">from {s.name}</span>
-                      <span className="overview-value">{fmt(s.total)}</span>
-                    </div>
-                  ))}
-                </div>
+                {Object.keys(pot.sources).length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {Object.values(pot.sources).map((s, i) => (
+                      <div key={i} className="overview-row">
+                        <span className="overview-label">from {s.name}</span>
+                        <span className="overview-value">{fmt(s.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--ink-faint)', fontStyle: 'italic' }}>No money added yet</div>
+                )}
               </div>
             )
           })}
@@ -166,7 +193,7 @@ export default function OverviewTab({ pots, accounts, transactions }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div className="overview-row overview-row--start">
+                  <div className={`overview-row ${acc.totalDeducted > 0 ? 'overview-row--start' : ''}`}>
                     <span className="overview-label">Current balance</span>
                     <span className="overview-value">{fmt(acc.balance)}</span>
                   </div>
@@ -178,10 +205,12 @@ export default function OverviewTab({ pots, accounts, transactions }) {
                     </div>
                   ))}
 
-                  <div className="overview-row overview-row--end">
-                    <span style={{ fontWeight: 500 }}>After allocations</span>
-                    <span className="overview-balance">{fmt(virtualBalance)}</span>
-                  </div>
+                  {acc.totalDeducted > 0 && (
+                    <div className="overview-row overview-row--end">
+                      <span style={{ fontWeight: 500 }}>After allocations</span>
+                      <span className="overview-balance">{fmt(virtualBalance)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )
