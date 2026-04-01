@@ -1,20 +1,23 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import type { User } from 'firebase/auth'
 import { useAuth } from '../hooks/useAuth'
 import { subscribePots, subscribeAccounts, subscribeTransactions } from '../lib/db'
 import { computeCommitted } from '../lib/allocation'
+import type { Pot, Account, EffectiveAccount, Transaction } from '../types'
 import PotsTab from '../components/PotsTab'
 import AccountsTab from '../components/AccountsTab'
 import HistoryTab from '../components/HistoryTab'
 import OverviewTab from '../components/OverviewTab'
 
-const TABS = ['Overview', 'Pots', 'Accounts', 'History']
+const TABS = ['Overview', 'Pots', 'Accounts', 'History'] as const
+type Tab = typeof TABS[number]
 
-export default function Dashboard({ user }) {
+export default function Dashboard({ user }: { user: User }) {
   const { logout } = useAuth()
-  const [activeTab, setActiveTab] = useState('Overview')
-  const [pots, setPots] = useState([])
-  const [accounts, setAccounts] = useState([])
-  const [transactions, setTransactions] = useState([])
+  const [activeTab, setActiveTab] = useState<Tab>('Overview')
+  const [pots, setPots] = useState<Pot[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const potsReady = useRef(false)
   const txnReady = useRef(false)
   const autoTabDone = useRef(false)
@@ -37,7 +40,7 @@ export default function Dashboard({ user }) {
   // Accounts with balance reduced by amounts already committed to active pots.
   // Used for allocation logic (TopUpModal) and "available" display in AccountsTab.
   // Raw `accounts` are never mutated — balances stay as the user entered them.
-  const effectiveAccounts = useMemo(() => {
+  const effectiveAccounts = useMemo((): EffectiveAccount[] => {
     const committed = computeCommitted(pots, transactions)
     return accounts.map(acc => ({
       ...acc,
@@ -49,7 +52,7 @@ export default function Dashboard({ user }) {
   // Captured via closure — only runs once, after both pots and transactions have loaded
   let latestPots = pots
   let latestTxns = transactions
-  function maybeAutoTab(newPots, newTxns) {
+  function maybeAutoTab(newPots: Pot[] | null, newTxns: Transaction[] | null) {
     if (newPots) latestPots = newPots
     if (newTxns) latestTxns = newTxns
     if (!potsReady.current || !txnReady.current || autoTabDone.current) return
@@ -95,7 +98,7 @@ export default function Dashboard({ user }) {
           <OverviewTab pots={pots} accounts={accounts} transactions={transactions} />
         )}
         {activeTab === 'History' && (
-          <HistoryTab transactions={transactions} pots={pots} accounts={accounts} />
+          <HistoryTab transactions={transactions} />
         )}
       </main>
     </div>

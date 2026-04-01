@@ -1,6 +1,7 @@
 import { fmt } from '../lib/allocation'
+import type { Transaction } from '../types'
 
-export default function HistoryTab({ transactions, pots, accounts }) {
+export default function HistoryTab({ transactions }: { transactions: Transaction[] }) {
   if (transactions.length === 0) {
     return (
       <div className="empty">

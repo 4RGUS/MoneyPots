@@ -1,22 +1,34 @@
 import { useState, useMemo } from 'react'
 import { smartAllocate, availableBalance, fmt } from '../lib/allocation'
+import type { Pot, EffectiveAccount, Alloc } from '../types'
 
-export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
+interface TopUpModalProps {
+  pot: Pot
+  accounts: EffectiveAccount[]
+  onConfirm: (amount: number, allocs: Alloc[]) => Promise<void>
+  onClose: () => void
+}
+
+export default function TopUpModal({ pot, accounts, onConfirm, onClose }: TopUpModalProps) {
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(false)
 
   const remaining = pot.target - pot.saved
 
   // Fixed rates from total goal duration + catch-up amount if behind
-  const { fixedDaily, fixedMonthly, catchUp } = useMemo(() => {
+  const { fixedDaily, fixedMonthly, catchUp } = useMemo<{
+    fixedDaily?: number
+    fixedMonthly?: number
+    catchUp?: number | null
+  }>(() => {
     if (!pot.deadline || !pot.createdAt) return {}
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const end = new Date(pot.deadline)
-    const daysLeft = Math.round((end - today) / 86400000)
+    const daysLeft = Math.round((end.getTime() - today.getTime()) / 86400000)
     if (daysLeft <= 0) return {}
     const created = new Date(pot.createdAt.toDate()); created.setHours(0, 0, 0, 0)
-    const totalDays = Math.max(1, Math.round((end - created) / 86400000))
-    const elapsed   = Math.max(0, Math.round((today - created) / 86400000))
+    const totalDays = Math.max(1, Math.round((end.getTime() - created.getTime()) / 86400000))
+    const elapsed   = Math.max(0, Math.round((today.getTime() - created.getTime()) / 86400000))
     const fixedDaily   = Math.ceil(pot.target / totalDays)
     const fixedMonthly = Math.ceil(pot.target / (totalDays / 30.44))
     const expectedSaved = (elapsed / totalDays) * pot.target
@@ -27,7 +39,7 @@ export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
   const { allocs, shortfall, totalAvailable } = useMemo(() => {
     const raw = parseFloat(amount) || 0
     const val = Math.min(raw, remaining)   // never allocate more than the pot needs
-    if (val <= 0) return { allocs: [], shortfall: 0, totalAvailable: 0 }
+    if (val <= 0) return { allocs: [] as Alloc[], shortfall: 0, totalAvailable: 0 }
     const result = smartAllocate(accounts, val)
     const totalAvailable = accounts.reduce((s, a) => s + availableBalance(a), 0)
     return { ...result, totalAvailable }
@@ -36,6 +48,9 @@ export default function TopUpModal({ pot, accounts, onConfirm, onClose }) {
   const parsedAmount = parseFloat(amount) || 0
   const cappedAmount = Math.min(parsedAmount, remaining)
   const actualAmount = cappedAmount - shortfall
+
+  // suppress unused warning — totalAvailable is kept for future use
+  void totalAvailable
 
   async function handleConfirm() {
     if (parsedAmount <= 0 || allocs.length === 0) return

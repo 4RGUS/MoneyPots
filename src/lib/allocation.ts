@@ -1,3 +1,5 @@
+import type { Account, Alloc, Pot, Transaction } from '../types'
+
 /**
  * Given a list of accounts and a top-up amount, returns the best allocation.
  *
@@ -6,9 +8,9 @@
  * 2. Among usable accounts, the one with the highest available balance is
  *    debited first (greedy highest-first).
  *
- * Returns: { allocs: [{ account, deduct }], shortfall }
+ * Returns: { allocs, shortfall }
  */
-export function smartAllocate(accounts, amount) {
+export function smartAllocate(accounts: Account[], amount: number): { allocs: Alloc[]; shortfall: number } {
   const candidates = accounts
     .map(a => ({
       account: a,
@@ -20,7 +22,7 @@ export function smartAllocate(accounts, amount) {
     .sort((a, b) => b.available - a.available)   // highest available first
 
   let remaining = amount
-  const allocs = []
+  const allocs: Alloc[] = []
 
   for (const { account, available } of candidates) {
     if (remaining <= 0) break
@@ -32,14 +34,14 @@ export function smartAllocate(accounts, amount) {
   return { allocs, shortfall: Math.max(0, remaining) }
 }
 
-export function availableBalance(account) {
+export function availableBalance(account: Account): number {
   if (account.type === 'savings') {
     return Math.max(0, account.balance - (account.minBalance || 0))
   }
   return Math.max(0, account.balance)
 }
 
-export function fmt(n) {
+export function fmt(n: number): string {
   return '₹' + Math.round(n).toLocaleString('en-IN')
 }
 
@@ -49,17 +51,17 @@ export function fmt(n) {
  * `saved` amount is fully explained. This prevents double-counting when a
  * pot has been reset and topped up again.
  *
- * @param {Array} pots - live pot objects (must have id, saved)
- * @param {Array} transactions - sorted DESC by createdAt (newest first)
- * @returns {{ [accountId]: number }} committed amount per account
+ * @param pots - live pot objects (must have id, saved)
+ * @param transactions - sorted DESC by createdAt (newest first)
+ * @returns committed amount per account
  */
-export function computeCommitted(pots, transactions) {
-  const toExplain = {}
+export function computeCommitted(pots: Pot[], transactions: Transaction[]): Record<string, number> {
+  const toExplain: Record<string, number> = {}
   for (const p of pots) {
     if (p.saved > 0) toExplain[p.id] = p.saved
   }
 
-  const committed = {}
+  const committed: Record<string, number> = {}
 
   for (const txn of transactions) {
     const remaining = toExplain[txn.potId]
@@ -84,19 +86,23 @@ export function computeCommitted(pots, transactions) {
  * contributions from that account and the order in which pots were first
  * funded (newest-first, matching transaction order).
  *
- * @param {string} accountId
- * @param {Array} pots
- * @param {Array} transactions - sorted DESC by createdAt (newest first)
- * @returns {{ contributions: { [potId]: number }, order: string[] }}
+ * @param accountId
+ * @param pots
+ * @param transactions - sorted DESC by createdAt (newest first)
+ * @returns contributions per pot and newest-first pot ordering
  */
-export function getAccountContributions(accountId, pots, transactions) {
-  const toExplain = {}
+export function getAccountContributions(
+  accountId: string,
+  pots: Pot[],
+  transactions: Transaction[],
+): { contributions: Record<string, number>; order: string[] } {
+  const toExplain: Record<string, number> = {}
   for (const p of pots) {
     if (p.saved > 0) toExplain[p.id] = p.saved
   }
 
-  const contributions = {}  // { potId: amountFromThisAccount }
-  const order = []          // potIds newest-first (first encountered = newest)
+  const contributions: Record<string, number> = {}
+  const order: string[] = []
 
   for (const txn of transactions) {
     const remaining = toExplain[txn.potId]
