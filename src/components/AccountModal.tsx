@@ -1,11 +1,24 @@
 import { useState } from 'react'
+import type { Account, EffectiveAccount } from '../types'
 
-export default function AccountModal({ title, initial, onSave, onClose }) {
+type AccountFormData = Omit<Account, 'id' | 'createdAt'>
+
+interface AccountModalProps {
+  title: string
+  initial?: Account | EffectiveAccount
+  onSave: (data: AccountFormData) => Promise<void>
+  onClose: () => void
+}
+
+export default function AccountModal({ title, initial, onSave, onClose }: AccountModalProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [bank, setBank] = useState(initial?.bank ?? '')
-  const [type, setType] = useState(initial?.type ?? 'savings')
-  const [balance, setBalance] = useState(initial?.rawBalance ?? initial?.balance ?? '')
-  const [minBalance, setMinBalance] = useState(initial?.minBalance ?? '')
+  const [type, setType] = useState<'salary' | 'savings'>(initial?.type ?? 'savings')
+  const [balance, setBalance] = useState<number | ''>(
+    // Use rawBalance when editing an EffectiveAccount so the modal shows the real bank balance
+    ('rawBalance' in (initial ?? {}) ? (initial as EffectiveAccount).rawBalance : initial?.balance) ?? ''
+  )
+  const [minBalance, setMinBalance] = useState<number | ''>(initial?.minBalance ?? '')
   const [loading, setLoading] = useState(false)
 
   async function handleSave() {
@@ -15,8 +28,8 @@ export default function AccountModal({ title, initial, onSave, onClose }) {
       name: name.trim(),
       bank: bank.trim(),
       type,
-      balance: parseFloat(balance) || 0,
-      minBalance: type === 'savings' ? (parseFloat(minBalance) || 0) : 0,
+      balance: parseFloat(String(balance)) || 0,
+      minBalance: type === 'savings' ? (parseFloat(String(minBalance)) || 0) : 0,
     })
     setLoading(false)
   }
@@ -38,7 +51,7 @@ export default function AccountModal({ title, initial, onSave, onClose }) {
 
         <div className="field">
           <label>Account type</label>
-          <select value={type} onChange={e => setType(e.target.value)}>
+          <select value={type} onChange={e => setType(e.target.value as 'salary' | 'savings')}>
             <option value="salary">Salary account (no minimum balance)</option>
             <option value="savings">Savings account (has minimum balance)</option>
           </select>
@@ -50,7 +63,7 @@ export default function AccountModal({ title, initial, onSave, onClose }) {
             <input
               type="number"
               value={minBalance}
-              onChange={e => setMinBalance(e.target.value)}
+              onChange={e => setMinBalance(e.target.value === '' ? '' : Number(e.target.value))}
               placeholder="e.g. 5000"
             />
           </div>
@@ -61,7 +74,7 @@ export default function AccountModal({ title, initial, onSave, onClose }) {
           <input
             type="number"
             value={balance}
-            onChange={e => setBalance(e.target.value)}
+            onChange={e => setBalance(e.target.value === '' ? '' : Number(e.target.value))}
             placeholder="e.g. 85000"
           />
         </div>

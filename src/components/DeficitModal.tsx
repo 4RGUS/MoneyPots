@@ -1,8 +1,19 @@
 import { useState } from 'react'
 import { fmt } from '../lib/allocation'
+import type { EffectiveAccount, Pot } from '../types'
 
-export default function DeficitModal({ account, deficit, contributions, order, pots, onResolve, onClose }) {
-  const [selected, setSelected] = useState('A')
+interface DeficitModalProps {
+  account: EffectiveAccount
+  deficit: number
+  contributions: Record<string, number>
+  order: string[]
+  pots: Pot[]
+  onResolve: (strategy: 'A' | 'B' | 'C') => Promise<void>
+  onClose: () => void
+}
+
+export default function DeficitModal({ account, deficit, contributions, order, pots, onResolve, onClose }: DeficitModalProps) {
+  const [selected, setSelected] = useState<'A' | 'B' | 'C'>('A')
   const [loading, setLoading] = useState(false)
 
   const total = Object.values(contributions).reduce((a, b) => a + b, 0)
@@ -11,7 +22,7 @@ export default function DeficitModal({ account, deficit, contributions, order, p
   const bPreview = Object.entries(contributions).map(([potId, amt]) => ({
     pot: pots.find(p => p.id === potId),
     reduction: amt * (deficit / total),
-  })).filter(r => r.pot)
+  })).filter(r => r.pot != null) as Array<{ pot: Pot; reduction: number }>
 
   // Preview: newest-first reductions
   let rem = deficit
@@ -19,7 +30,7 @@ export default function DeficitModal({ account, deficit, contributions, order, p
     const reduction = Math.min(contributions[potId] || 0, rem)
     rem = Math.max(0, rem - reduction)
     return { pot: pots.find(p => p.id === potId), reduction }
-  }).filter(r => r.pot && r.reduction > 0)
+  }).filter((r): r is { pot: Pot; reduction: number } => r.pot != null && r.reduction > 0)
 
   async function handleApply() {
     setLoading(true)
@@ -27,7 +38,13 @@ export default function DeficitModal({ account, deficit, contributions, order, p
     setLoading(false)
   }
 
-  const options = [
+  const options: Array<{
+    id: 'A' | 'B' | 'C'
+    icon: string
+    label: string
+    desc: string
+    preview: Array<{ pot: Pot; reduction: number }> | null
+  }> = [
     {
       id: 'A',
       icon: '⚠',
@@ -39,7 +56,7 @@ export default function DeficitModal({ account, deficit, contributions, order, p
       id: 'B',
       icon: '~',
       label: 'Reduce proportionally',
-      desc: 'Spread the deficit across all affected pots based on each pot\'s share.',
+      desc: "Spread the deficit across all affected pots based on each pot's share.",
       preview: bPreview,
     },
     {
@@ -83,7 +100,7 @@ export default function DeficitModal({ account, deficit, contributions, order, p
               <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: opt.preview?.length ? 8 : 0 }}>
                 {opt.desc}
               </div>
-              {opt.preview?.length > 0 && (
+              {opt.preview && opt.preview.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {opt.preview.map((r, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>

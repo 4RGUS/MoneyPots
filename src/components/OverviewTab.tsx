@@ -1,13 +1,41 @@
 import { useMemo, useState } from 'react'
 import { fmt } from '../lib/allocation'
+import type { Pot, Account, Transaction } from '../types'
 
-export default function OverviewTab({ pots, accounts, transactions }) {
+interface PotEntry {
+  id: string
+  name: string
+  icon: string
+  color: string
+  saved: number
+  target: number
+  sources: Record<string, { name: string; total: number }>
+  toExplain: number
+}
+
+interface AccEntry {
+  id: string
+  name: string
+  bank: string
+  type: string
+  balance: number
+  totalDeducted: number
+  deductions: Record<string, { potName: string; total: number }>
+}
+
+interface OverviewTabProps {
+  pots: Pot[]
+  accounts: Account[]
+  transactions: Transaction[]
+}
+
+export default function OverviewTab({ pots, accounts, transactions }: OverviewTabProps) {
   // Walk transactions newest→oldest and only accumulate up to pot.saved for each pot.
   // This ensures that if a pot was reset and topped up again, only the most recent
   // top-ups (that explain the current saved amount) are counted.
   const { potBreakdown, accountBreakdown } = useMemo(() => {
     // Per-pot working state — include ALL pots
-    const potData = {}
+    const potData: Record<string, PotEntry> = {}
     for (const p of pots) {
       potData[p.id] = {
         id: p.id,
@@ -17,12 +45,12 @@ export default function OverviewTab({ pots, accounts, transactions }) {
         saved: p.saved,
         target: p.target,
         sources: {},
-        toExplain: p.saved,   // how much of saved is still unaccounted for
+        toExplain: p.saved,
       }
     }
 
     // Per-account working state — include ALL accounts upfront
-    const accData = {}
+    const accData: Record<string, AccEntry> = {}
     for (const a of accounts) {
       accData[a.id] = {
         id: a.id,
@@ -38,22 +66,19 @@ export default function OverviewTab({ pots, accounts, transactions }) {
     // Transactions arrive DESC (newest first) from Firestore
     for (const txn of transactions) {
       const pot = potData[txn.potId]
-      if (!pot || pot.toExplain <= 0) continue   // unknown pot or fully explained
+      if (!pot || pot.toExplain <= 0) continue
 
-      // Only count the portion of this transaction that's still needed
       const contribution = Math.min(txn.amount, pot.toExplain)
       const scale = txn.amount > 0 ? contribution / txn.amount : 0
 
       for (const s of txn.sources ?? []) {
         const effectiveDeduct = s.deduct * scale
 
-        // Pot sources
         if (!pot.sources[s.accountId]) {
           pot.sources[s.accountId] = { name: s.accountName, total: 0 }
         }
         pot.sources[s.accountId].total += effectiveDeduct
 
-        // Account deductions
         const acc = accData[s.accountId]
         if (acc) {
           if (!acc.deductions[txn.potId]) {
@@ -172,8 +197,6 @@ export default function OverviewTab({ pots, accounts, transactions }) {
         <h2 style={{ marginBottom: '1rem' }}>Accounts breakdown</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {accountBreakdown.map(acc => {
-            // acc.balance = raw user-entered balance (never mutated by the app)
-            // virtualBalance = what you'd have left if you actually moved this money
             const virtualBalance = acc.balance - acc.totalDeducted
             return (
               <div key={acc.id} className="card">

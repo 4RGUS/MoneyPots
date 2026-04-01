@@ -1,47 +1,61 @@
 import { useState, useMemo } from 'react'
 import { addAccount, updateAccount, deleteAccount, updatePot } from '../lib/db'
 import { availableBalance, fmt, computeCommitted, getAccountContributions } from '../lib/allocation'
+import type { Account, EffectiveAccount, Pot, Transaction } from '../types'
 import AccountModal from './AccountModal'
 import DeficitModal from './DeficitModal'
 
-export default function AccountsTab({ uid, accounts, pots, transactions }) {
+interface AccountsTabProps {
+  uid: string
+  accounts: EffectiveAccount[]
+  pots: Pot[]
+  transactions: Transaction[]
+}
+
+export default function AccountsTab({ uid, accounts, pots, transactions }: AccountsTabProps) {
   const [showAdd, setShowAdd] = useState(false)
-  const [editAcc, setEditAcc] = useState(null)
-  const [deficitState, setDeficitState] = useState(null)
+  const [editAcc, setEditAcc] = useState<EffectiveAccount | null>(null)
+  const [deficitState, setDeficitState] = useState<{
+    pendingData: Omit<Account, 'id' | 'createdAt'>
+    account: EffectiveAccount
+    deficit: number
+    contributions: Record<string, number>
+    order: string[]
+  } | null>(null)
 
   const committed = useMemo(() => computeCommitted(pots, transactions), [pots, transactions])
 
-  async function handleAdd(data) {
+  async function handleAdd(data: Omit<Account, 'id' | 'createdAt'>) {
     await addAccount(uid, data)
     setShowAdd(false)
   }
 
-  async function handleEdit(data) {
-    const committedAmount = committed[editAcc.id] || 0
+  async function handleEdit(data: Omit<Account, 'id' | 'createdAt'>) {
+    const committedAmount = committed[editAcc!.id] || 0
     if (data.balance < committedAmount) {
-      const { contributions, order } = getAccountContributions(editAcc.id, pots, transactions)
+      const { contributions, order } = getAccountContributions(editAcc!.id, pots, transactions)
       setDeficitState({
         pendingData: data,
-        account: editAcc,
+        account: editAcc!,
         deficit: committedAmount - data.balance,
         contributions,
         order,
       })
       setEditAcc(null)
     } else {
-      await updateAccount(uid, editAcc.id, data)
+      await updateAccount(uid, editAcc!.id, data)
       setEditAcc(null)
     }
   }
 
-  async function handleDelete(acc) {
+  async function handleDelete(acc: EffectiveAccount) {
     if (!confirm(`Remove account "${acc.name}"?`)) return
     await deleteAccount(uid, acc.id)
   }
 
-  async function handleDeficitResolution(strategy) {
-    const { pendingData, account, deficit, contributions, order } = deficitState
-    const writes = [updateAccount(uid, account.id, pendingData)]
+  async function handleDeficitResolution(strategy: 'A' | 'B' | 'C') {
+    const { pendingData, account, deficit, contributions, order } = deficitState!
+    const writes: Promise<unknown>[] = [updateAccount(uid, account.id, pendingData)]
 
     if (strategy === 'B') {
       const total = Object.values(contributions).reduce((a, b) => a + b, 0)

@@ -1,12 +1,22 @@
 import { useState } from 'react'
+import type { Pot } from '../types'
 
 const ICONS = ['🏖','🚗','🏠','💍','📱','✈️','🎓','💊','🛋','🎹','🏋️','🎮','🌿','🐾','🎂']
 const COLORS = ['#E8C9A0','#A8D5BA','#B5C7E8','#E8B5B5','#C9B8E8','#E8D5A3','#B8E8D5','#E8C0B8','#C8E8B8','#E8D0C0']
 
-export default function PotModal({ title, initial, onSave, onClose }) {
+type PotFormData = Omit<Pot, 'id' | 'createdAt'>
+
+interface PotModalProps {
+  title: string
+  initial?: Pot
+  onSave: (data: PotFormData) => Promise<void>
+  onClose: () => void
+}
+
+export default function PotModal({ title, initial, onSave, onClose }: PotModalProps) {
   const [name, setName] = useState(initial?.name ?? '')
-  const [target, setTarget] = useState(initial?.target ?? '')
-  const [saved, setSaved] = useState(initial?.saved ?? 0)
+  const [target, setTarget] = useState<number | ''>(initial?.target ?? '')
+  const [saved, setSaved] = useState<number | ''>(initial?.saved ?? 0)
   const [icon, setIcon] = useState(initial?.icon ?? ICONS[0])
   const [color, setColor] = useState(initial?.color ?? COLORS[0])
   const [deadline, setDeadline] = useState(initial?.deadline ?? '')
@@ -22,8 +32,8 @@ export default function PotModal({ title, initial, onSave, onClose }) {
     setLoading(true)
     await onSave({
       name: name.trim(),
-      target: parseFloat(target),
-      saved: parseFloat(saved) || 0,
+      target: parseFloat(String(target)),
+      saved: parseFloat(String(saved)) || 0,
       icon,
       color,
       deadline: deadline || null,
@@ -43,13 +53,13 @@ export default function PotModal({ title, initial, onSave, onClose }) {
 
         <div className="field">
           <label>Target amount (₹)</label>
-          <input type="number" value={target} onChange={e => setTarget(e.target.value)} placeholder="50000" />
+          <input type="number" value={target} onChange={e => setTarget(e.target.value === '' ? '' : Number(e.target.value))} placeholder="50000" />
         </div>
 
         {initial && (
           <div className="field">
             <label>Amount saved so far (₹)</label>
-            <input type="number" value={saved} onChange={e => setSaved(e.target.value)} />
+            <input type="number" value={saved} onChange={e => setSaved(e.target.value === '' ? '' : Number(e.target.value))} />
           </div>
         )}
 
@@ -57,7 +67,7 @@ export default function PotModal({ title, initial, onSave, onClose }) {
           <label>Complete by (optional)</label>
           <input
             type="date"
-            value={deadline}
+            value={deadline ?? ''}
             min={minDateStr}
             onChange={e => setDeadline(e.target.value)}
           />

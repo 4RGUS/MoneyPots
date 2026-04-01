@@ -1,31 +1,38 @@
 import { useState } from 'react'
 import { addPot, updatePot, deletePot, addTransaction } from '../lib/db'
 import { fmt } from '../lib/allocation'
+import type { Pot, EffectiveAccount, Alloc } from '../types'
 import PotModal from './PotModal'
 import TopUpModal from './TopUpModal'
 
-export default function PotsTab({ uid, pots, accounts }) {
-  const [showAdd, setShowAdd] = useState(false)
-  const [editPot, setEditPot] = useState(null)
-  const [topUpPot, setTopUpPot] = useState(null)
-  const [rateMode, setRateMode] = useState('month') // 'month' | 'day'
+interface PotsTabProps {
+  uid: string
+  pots: Pot[]
+  accounts: EffectiveAccount[]
+}
 
-  async function handleAdd(data) {
+export default function PotsTab({ uid, pots, accounts }: PotsTabProps) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [editPot, setEditPot] = useState<Pot | null>(null)
+  const [topUpPot, setTopUpPot] = useState<Pot | null>(null)
+  const [rateMode, setRateMode] = useState<'month' | 'day'>('month')
+
+  async function handleAdd(data: Omit<Pot, 'id' | 'createdAt'>) {
     await addPot(uid, data)
     setShowAdd(false)
   }
 
-  async function handleEdit(data) {
-    await updatePot(uid, editPot.id, data)
+  async function handleEdit(data: Omit<Pot, 'id' | 'createdAt'>) {
+    await updatePot(uid, editPot!.id, data)
     setEditPot(null)
   }
 
-  async function handleDelete(pot) {
+  async function handleDelete(pot: Pot) {
     if (!confirm(`Remove pot "${pot.name}"?`)) return
     await deletePot(uid, pot.id)
   }
 
-  async function handleTopUp(pot, amount, allocs) {
+  async function handleTopUp(pot: Pot, amount: number, allocs: Alloc[]) {
     // Account balances are never mutated — they are the user's reference values.
     // Deductions are virtual projections tracked via transactions.
     const newSaved = Math.min(pot.target, pot.saved + amount)
@@ -49,19 +56,24 @@ export default function PotsTab({ uid, pots, accounts }) {
           const done = pct >= 100
 
           // Deadline calculations — fixed rates based on total goal duration
-          let daysLeft = null, fixedDaily = null, fixedMonthly = null
-          let overdue = false, onTrack = null, behindBy = 0
+          let daysLeft: number | null = null
+          let fixedDaily: number | null = null
+          let fixedMonthly: number | null = null
+          let overdue = false
+          let onTrack: boolean | null = null
+          let behindBy = 0
+
           if (pot.deadline && !done) {
             const today = new Date(); today.setHours(0, 0, 0, 0)
             const end = new Date(pot.deadline)
-            daysLeft = Math.round((end - today) / 86400000)
+            daysLeft = Math.round((end.getTime() - today.getTime()) / 86400000)
             overdue = daysLeft < 0
             if (!overdue) {
               const createdDate = pot.createdAt?.toDate?.()
               if (createdDate) {
                 const created = new Date(createdDate); created.setHours(0, 0, 0, 0)
-                const totalDays = Math.max(1, Math.round((end - created) / 86400000))
-                const elapsed   = Math.max(0, Math.round((today - created) / 86400000))
+                const totalDays = Math.max(1, Math.round((end.getTime() - created.getTime()) / 86400000))
+                const elapsed   = Math.max(0, Math.round((today.getTime() - created.getTime()) / 86400000))
                 fixedDaily   = Math.ceil(pot.target / totalDays)
                 fixedMonthly = Math.ceil(pot.target / (totalDays / 30.44))
                 const expectedSaved = (elapsed / totalDays) * pot.target
@@ -97,7 +109,7 @@ export default function PotsTab({ uid, pots, accounts }) {
               {pot.deadline && !done && (
                 <div className={`pot-deadline ${overdue ? 'overdue' : onTrack === false ? 'behind' : ''}`}>
                   {overdue
-                    ? `⚠ Overdue by ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? 's' : ''}`
+                    ? `⚠ Overdue by ${Math.abs(daysLeft!)} day${Math.abs(daysLeft!) !== 1 ? 's' : ''}`
                     : daysLeft === 0
                       ? '⏰ Due today'
                       : <>
@@ -110,7 +122,7 @@ export default function PotsTab({ uid, pots, accounts }) {
                                 onClick={() => setRateMode(m => m === 'month' ? 'day' : 'month')}
                                 title="Switch between per month / per day"
                               >
-                                {rateMode === 'month' ? `${fmt(fixedMonthly)}/mo` : `${fmt(fixedDaily)}/day`}
+                                {rateMode === 'month' ? `${fmt(fixedMonthly!)}/mo` : `${fmt(fixedDaily)}/day`}
                               </button>
                             </>
                           )}
