@@ -4,7 +4,7 @@ export default function AccountModal({ title, initial, onSave, onClose }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [bank, setBank] = useState(initial?.bank ?? '')
   const [type, setType] = useState(initial?.type ?? 'savings')
-  const [balance, setBalance] = useState(initial?.balance ?? '')
+  const [balance, setBalance] = useState(initial?.rawBalance ?? initial?.balance ?? '')
   const [minBalance, setMinBalance] = useState(initial?.minBalance ?? '')
   const [loading, setLoading] = useState(false)
 

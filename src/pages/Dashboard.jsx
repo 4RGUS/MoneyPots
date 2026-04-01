@@ -89,7 +89,7 @@ export default function Dashboard({ user }) {
           <PotsTab uid={user.uid} pots={pots} accounts={effectiveAccounts} />
         )}
         {activeTab === 'Accounts' && (
-          <AccountsTab uid={user.uid} accounts={effectiveAccounts} />
+          <AccountsTab uid={user.uid} accounts={effectiveAccounts} pots={pots} transactions={transactions} />
         )}
         {activeTab === 'Overview' && (
           <OverviewTab pots={pots} accounts={accounts} transactions={transactions} />
