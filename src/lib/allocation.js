@@ -78,3 +78,45 @@ export function computeCommitted(pots, transactions) {
 
   return committed
 }
+
+/**
+ * Like computeCommitted, but scoped to a single account. Returns per-pot
+ * contributions from that account and the order in which pots were first
+ * funded (newest-first, matching transaction order).
+ *
+ * @param {string} accountId
+ * @param {Array} pots
+ * @param {Array} transactions - sorted DESC by createdAt (newest first)
+ * @returns {{ contributions: { [potId]: number }, order: string[] }}
+ */
+export function getAccountContributions(accountId, pots, transactions) {
+  const toExplain = {}
+  for (const p of pots) {
+    if (p.saved > 0) toExplain[p.id] = p.saved
+  }
+
+  const contributions = {}  // { potId: amountFromThisAccount }
+  const order = []          // potIds newest-first (first encountered = newest)
+
+  for (const txn of transactions) {
+    const remaining = toExplain[txn.potId]
+    if (!remaining) continue
+
+    const contribution = Math.min(txn.amount, remaining)
+    const scale = txn.amount > 0 ? contribution / txn.amount : 0
+
+    const source = txn.sources?.find(s => s.accountId === accountId)
+    if (source) {
+      const accountShare = source.deduct * scale
+      if (accountShare > 0) {
+        contributions[txn.potId] = (contributions[txn.potId] || 0) + accountShare
+        if (!order.includes(txn.potId)) order.push(txn.potId)
+      }
+    }
+
+    toExplain[txn.potId] -= contribution
+    if (toExplain[txn.potId] <= 0) delete toExplain[txn.potId]
+  }
+
+  return { contributions, order }
+}
