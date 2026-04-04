@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "statusMessage": "Checking if CLAUDE.md needs updating…",
+            "command": "bash \"c:/Personal Project/moneypots/moneypots/.claude/check-claude-md.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
