@@ -8,8 +8,9 @@ import PotsTab from '../components/PotsTab'
 import AccountsTab from '../components/AccountsTab'
 import HistoryTab from '../components/HistoryTab'
 import OverviewTab from '../components/OverviewTab'
+import CompletedTab from '../components/CompletedTab'
 
-const TABS = ['Overview', 'Pots', 'Accounts', 'History'] as const
+const TABS = ['Overview', 'Pots', 'Completed', 'Accounts', 'History'] as const
 type Tab = typeof TABS[number]
 
 export default function Dashboard({ user }: { user: User }) {
@@ -37,9 +38,6 @@ export default function Dashboard({ user }: { user: User }) {
     return () => { unsub1(); unsub2(); unsub3() }
   }, [user.uid])
 
-  // Accounts with balance reduced by amounts already committed to active pots.
-  // Used for allocation logic (TopUpModal) and "available" display in AccountsTab.
-  // Raw `accounts` are never mutated — balances stay as the user entered them.
   const effectiveAccounts = useMemo((): EffectiveAccount[] => {
     const committed = computeCommitted(pots, transactions)
     return accounts.map(acc => ({
@@ -49,7 +47,8 @@ export default function Dashboard({ user }: { user: User }) {
     }))
   }, [accounts, pots, transactions])
 
-  // Captured via closure — only runs once, after both pots and transactions have loaded
+  const completedPots = useMemo(() => pots.filter(p => p.saved >= p.target), [pots])
+
   let latestPots = pots
   let latestTxns = transactions
   function maybeAutoTab(newPots: Pot[] | null, newTxns: Transaction[] | null) {
@@ -61,6 +60,8 @@ export default function Dashboard({ user }: { user: User }) {
     const hasOverviewData = latestTxns.some(txn => activePotIds.has(txn.potId))
     if (!hasOverviewData) setActiveTab('Pots')
   }
+
+  const completedCount = completedPots.length
 
   return (
     <div className="app-shell">
@@ -84,12 +85,18 @@ export default function Dashboard({ user }: { user: User }) {
               onClick={() => setActiveTab(t)}
             >
               {t}
+              {t === 'Completed' && completedCount > 0 && (
+                <span className="tab-badge">{completedCount}</span>
+              )}
             </button>
           ))}
         </div>
 
         {activeTab === 'Pots' && (
           <PotsTab uid={user.uid} pots={pots} accounts={effectiveAccounts} />
+        )}
+        {activeTab === 'Completed' && (
+          <CompletedTab uid={user.uid} pots={completedPots} />
         )}
         {activeTab === 'Accounts' && (
           <AccountsTab uid={user.uid} accounts={effectiveAccounts} pots={pots} transactions={transactions} />

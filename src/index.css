@@ -491,6 +491,49 @@ h3 { font-size: 1.1rem; }
   color: var(--clay-dark);
 }
 
+/* ── Tab badge ──────────────────────────────────────────────────────── */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--clay);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 99px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+/* ── Completed pot card ─────────────────────────────────────────────── */
+.completed-pot-card {
+  border: 1.5px solid #B8D9A3;
+  background: linear-gradient(135deg, #F6FBF2 0%, white 100%);
+}
+
+/* ── Celebration animation ──────────────────────────────────────────── */
+@keyframes celebrate-pop {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.03); }
+  60%  { transform: scale(0.99); }
+  100% { transform: scale(1); }
+}
+
+.pot-celebrating {
+  animation: celebrate-pop 0.4s ease-out;
+  border: 1.5px solid #B8D9A3 !important;
+  background: linear-gradient(135deg, #F6FBF2 0%, white 100%) !important;
+}
+
+.pot-fading {
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .main-content { padding: 1.25rem 1rem; }

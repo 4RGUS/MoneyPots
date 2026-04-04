@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(grep -vE '^CLAUDE\\\\.md$')",
+      "Bash(node -e \"const s = require\\('fs'\\).readFileSync\\('c:/Personal Project/moneypots/moneypots/.claude/settings.json','utf8'\\); const j = JSON.parse\\(s\\); console.log\\('valid:', j.hooks.Stop[0].hooks[0].type, '| asyncRewake:', j.hooks.Stop[0].hooks[0].asyncRewake\\)\")"
     ]
   }
 }

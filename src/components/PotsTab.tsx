@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { addPot, updatePot, deletePot, addTransaction } from '../lib/db'
 import { fmt } from '../lib/allocation'
 import type { Pot, EffectiveAccount, Alloc } from '../types'
@@ -16,6 +16,33 @@ export default function PotsTab({ uid, pots, accounts }: PotsTabProps) {
   const [editPot, setEditPot] = useState<Pot | null>(null)
   const [topUpPot, setTopUpPot] = useState<Pot | null>(null)
   const [rateMode, setRateMode] = useState<'month' | 'day'>('month')
+
+  // Track pots that just hit 100% — show them for 3 seconds then hide
+  const [celebrating, setCelebrating] = useState<Set<string>>(new Set())
+  const [fadingOut, setFadingOut] = useState<Set<string>>(new Set())
+  const prevCompletedIds = useRef<Set<string>>(new Set(pots.filter(p => p.saved >= p.target).map(p => p.id)))
+
+  useEffect(() => {
+    const currentCompleted = new Set(pots.filter(p => p.saved >= p.target).map(p => p.id))
+    const newlyCompleted = [...currentCompleted].filter(id => !prevCompletedIds.current.has(id))
+    prevCompletedIds.current = currentCompleted
+
+    if (newlyCompleted.length === 0) return
+
+    setCelebrating(prev => new Set([...prev, ...newlyCompleted]))
+
+    newlyCompleted.forEach(id => {
+      // Start fade-out at 2.5s
+      setTimeout(() => {
+        setFadingOut(prev => new Set([...prev, id]))
+      }, 2500)
+      // Remove at 3s
+      setTimeout(() => {
+        setCelebrating(prev => { const n = new Set(prev); n.delete(id); return n })
+        setFadingOut(prev => { const n = new Set(prev); n.delete(id); return n })
+      }, 3000)
+    })
+  }, [pots])
 
   async function handleAdd(data: Omit<Pot, 'id' | 'createdAt'>) {
     await addPot(uid, data)
@@ -49,7 +76,7 @@ export default function PotsTab({ uid, pots, accounts }: PotsTabProps) {
   return (
     <>
       <div className="card-grid">
-        {pots.map(pot => {
+        {pots.filter(p => p.saved < p.target || celebrating.has(p.id)).map(pot => {
           const rawPct = pot.target > 0 ? (pot.saved / pot.target) * 100 : 0
           const pct = Math.min(100, Math.round(rawPct))
           const pctLabel = rawPct > 0 && rawPct < 1 ? `${rawPct.toFixed(1)}%` : `${pct}%`
@@ -83,8 +110,14 @@ export default function PotsTab({ uid, pots, accounts }: PotsTabProps) {
             }
           }
 
+          const isCelebrating = celebrating.has(pot.id)
+          const isFading = fadingOut.has(pot.id)
+
           return (
-            <div className="card pot-card" key={pot.id}>
+            <div
+              className={`card pot-card${isCelebrating ? ' pot-celebrating' : ''}${isFading ? ' pot-fading' : ''}`}
+              key={pot.id}
+            >
               <div className="pot-head">
                 <div className="pot-emoji" style={{ background: pot.color }}>{pot.icon}</div>
                 <div style={{ flex: 1 }}>
