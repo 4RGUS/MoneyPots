@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react'
-import { addAccount, updateAccount, deleteAccount, updatePot } from '../lib/db'
+import { useState, useEffect, useMemo } from 'react'
+import { addAccount, updateAccount, deleteAccount, updatePot, updateAccountWithHistory, subscribeAccountHistory } from '../lib/db'
 import { availableBalance, fmt, computeCommitted, getAccountContributions } from '../lib/allocation'
-import type { Account, EffectiveAccount, Pot, Transaction } from '../types'
+import type { Account, EffectiveAccount, Pot, Transaction, AccountHistoryEntry, AccountHistoryType } from '../types'
 import AccountModal from './AccountModal'
 import DeficitModal from './DeficitModal'
 
@@ -24,13 +24,27 @@ export default function AccountsTab({ uid, accounts, pots, transactions }: Accou
   } | null>(null)
 
   const committed = useMemo(() => computeCommitted(pots, transactions), [pots, transactions])
+  const [expandedHistoryAccId, setExpandedHistoryAccId] = useState<string | null>(null)
+  const [accountHistory, setAccountHistory] = useState<AccountHistoryEntry[]>([])
+
+  useEffect(() => {
+    if (!expandedHistoryAccId) { setAccountHistory([]); return }
+    return subscribeAccountHistory(uid, expandedHistoryAccId, setAccountHistory)
+  }, [uid, expandedHistoryAccId])
+
+  const historyLabel: Record<AccountHistoryType, string> = {
+    credit: '↑ Deposit / Salary',
+    debit: '↓ Withdrawal',
+    correction: '⟳ Bank sync',
+    goal_fulfilled: '✓ Goal fulfilled',
+  }
 
   async function handleAdd(data: Omit<Account, 'id' | 'createdAt'>) {
     await addAccount(uid, data)
     setShowAdd(false)
   }
 
-  async function handleEdit(data: Omit<Account, 'id' | 'createdAt'>) {
+  async function handleEdit(data: Omit<Account, 'id' | 'createdAt'>, historyType: AccountHistoryType, note: string) {
     const committedAmount = committed[editAcc!.id] || 0
     if (data.balance < committedAmount) {
       const { contributions, order } = getAccountContributions(editAcc!.id, pots, transactions)
@@ -43,7 +57,8 @@ export default function AccountsTab({ uid, accounts, pots, transactions }: Accou
       })
       setEditAcc(null)
     } else {
-      await updateAccount(uid, editAcc!.id, data)
+      const delta = data.balance - (editAcc!.rawBalance ?? editAcc!.balance)
+      await updateAccountWithHistory(uid, editAcc!.id, data, { type: historyType, delta, newBalance: data.balance, note: note || null })
       setEditAcc(null)
     }
   }
@@ -88,54 +103,86 @@ export default function AccountsTab({ uid, accounts, pots, transactions }: Accou
           const isDeficit = rawBalance < committedAmount
           const inPots = isDeficit ? committedAmount : rawBalance - acc.balance
           const avail = availableBalance(acc)
+          const historyOpen = expandedHistoryAccId === acc.id
           return (
-            <div className="card acc-card" key={acc.id}>
-              <div
-                className="acc-icon"
-                style={{ background: acc.type === 'salary' ? '#EAF3DE' : '#E6F1FB' }}
-              >
-                {acc.type === 'salary' ? '💼' : '🏦'}
+            <div key={acc.id}>
+              <div className="card acc-card">
+                <div
+                  className="acc-icon"
+                  style={{ background: acc.type === 'salary' ? '#EAF3DE' : '#E6F1FB' }}
+                >
+                  {acc.type === 'salary' ? '💼' : '🏦'}
+                </div>
+
+                <div className="acc-info">
+                  <div className="acc-name">{acc.name}</div>
+                  <div className="acc-meta">
+                    {acc.bank}
+                    <span className={`badge badge-${acc.type}`}>
+                      {acc.type === 'salary' ? 'Salary' : 'Savings'}
+                    </span>
+                  </div>
+                  {acc.type === 'savings' && (
+                    <div style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 3 }}>
+                      Min balance: {fmt(acc.minBalance || 0)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="acc-right">
+                  <div className="acc-balance">{fmt(rawBalance)}</div>
+                  {isDeficit ? (
+                    <div style={{ fontSize: 11, color: '#A32D2D', background: '#FDECEA', borderRadius: 6, padding: '2px 7px', marginTop: 3 }}>
+                      ⚠ Deficit: {fmt(committedAmount - rawBalance)}
+                    </div>
+                  ) : inPots > 0 && (
+                    <>
+                      <div style={{ fontSize: 12, color: '#A32D2D', marginTop: 2 }}>
+                        In pots: − {fmt(inPots)}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: 1 }}>
+                        After pots: {fmt(acc.balance)}
+                      </div>
+                    </>
+                  )}
+                  <div className={`acc-avail ${avail > 0 ? 'ok' : 'low'}`} style={{ marginTop: inPots > 0 || isDeficit ? 4 : 2 }}>
+                    Free for pots: {fmt(avail)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+                    <button className="btn btn-sm btn-ghost" onClick={() => setExpandedHistoryAccId(historyOpen ? null : acc.id)}>
+                      {historyOpen ? 'Hide history' : 'History'}
+                    </button>
+                    <button className="btn btn-sm" onClick={() => setEditAcc(acc)}>Edit</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(acc)}>Remove</button>
+                  </div>
+                </div>
               </div>
 
-              <div className="acc-info">
-                <div className="acc-name">{acc.name}</div>
-                <div className="acc-meta">
-                  {acc.bank}
-                  <span className={`badge badge-${acc.type}`}>
-                    {acc.type === 'salary' ? 'Salary' : 'Savings'}
-                  </span>
+              {historyOpen && (
+                <div className="card" style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0, marginTop: -4, paddingTop: 8 }}>
+                  {accountHistory.length === 0 ? (
+                    <div className="txn-meta" style={{ padding: '4px 0' }}>No balance history yet.</div>
+                  ) : (
+                    accountHistory.map(entry => (
+                      <div className="txn-row" key={entry.id}>
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{historyLabel[entry.type]}</div>
+                          <div className="txn-meta">
+                            {entry.createdAt?.toDate().toLocaleDateString('en-IN')}
+                            {entry.note && <> · {entry.note}</>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: entry.delta >= 0 ? '#3B6D11' : '#A32D2D', fontWeight: 500 }}>
+                            {entry.delta >= 0 ? '+' : ''}{fmt(entry.delta)}
+                          </div>
+                          <div className="txn-meta">→ {fmt(entry.newBalance)}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-                {acc.type === 'savings' && (
-                  <div style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 3 }}>
-                    Min balance: {fmt(acc.minBalance || 0)}
-                  </div>
-                )}
-              </div>
-
-              <div className="acc-right">
-                <div className="acc-balance">{fmt(rawBalance)}</div>
-                {isDeficit ? (
-                  <div style={{ fontSize: 11, color: '#A32D2D', background: '#FDECEA', borderRadius: 6, padding: '2px 7px', marginTop: 3 }}>
-                    ⚠ Deficit: {fmt(committedAmount - rawBalance)}
-                  </div>
-                ) : inPots > 0 && (
-                  <>
-                    <div style={{ fontSize: 12, color: '#A32D2D', marginTop: 2 }}>
-                      In pots: − {fmt(inPots)}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: 1 }}>
-                      After pots: {fmt(acc.balance)}
-                    </div>
-                  </>
-                )}
-                <div className={`acc-avail ${avail > 0 ? 'ok' : 'low'}`} style={{ marginTop: inPots > 0 || isDeficit ? 4 : 2 }}>
-                  Free for pots: {fmt(avail)}
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
-                  <button className="btn btn-sm" onClick={() => setEditAcc(acc)}>Edit</button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(acc)}>Remove</button>
-                </div>
-              </div>
+              )}
             </div>
           )
         })}

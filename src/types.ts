@@ -8,6 +8,7 @@ export interface Pot {
   icon: string
   color: string
   deadline?: string | null
+  status?: 'fulfilled'
   createdAt?: Timestamp | null
 }
 
@@ -43,4 +44,15 @@ export interface Transaction {
 export interface Alloc {
   account: Account
   deduct: number
+}
+
+export type AccountHistoryType = 'credit' | 'debit' | 'correction' | 'goal_fulfilled'
+
+export interface AccountHistoryEntry {
+  id: string
+  type: AccountHistoryType
+  delta: number
+  newBalance: number
+  note?: string | null
+  createdAt?: Timestamp | null
 }

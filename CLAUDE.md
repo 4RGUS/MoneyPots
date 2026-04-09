@@ -52,7 +52,7 @@ Firebase onSnapshot subscriptions → Dashboard.tsx state → tab components →
 
 | File | Purpose |
 |------|---------|
-| [src/types.ts](src/types.ts) | Shared TypeScript interfaces: `Pot`, `Account`, `EffectiveAccount`, `Transaction`, `TransactionSource`, `Alloc` |
+| [src/types.ts](src/types.ts) | Shared TypeScript interfaces: `Pot`, `Account`, `EffectiveAccount`, `Transaction`, `TransactionSource`, `Alloc`, `AccountHistoryEntry`, `AccountHistoryType` |
 | [src/lib/firebase.ts](src/lib/firebase.ts) | Firebase app init, Google auth provider |
 | [src/lib/db.ts](src/lib/db.ts) | All Firestore CRUD + `onSnapshot` subscriptions |
 | [src/lib/allocation.ts](src/lib/allocation.ts) | Smart allocation algorithm, committed calculation, account contributions |
@@ -69,6 +69,8 @@ Firebase onSnapshot subscriptions → Dashboard.tsx state → tab components →
 **`computeCommitted(pots, transactions)`** walks transactions newest-first and returns `{ [accountId]: number }` — the total amount committed to active pots per account. Stops at each pot's current `saved` value to avoid double-counting from reset+retopup cycles.
 
 **`getAccountContributions(accountId, pots, transactions)`** is like `computeCommitted` but scoped to one account. Returns `{ contributions: { [potId]: number }, order: string[] }` — used by the deficit resolution flow.
+
+**`getPotContributions(pot, transactions)`** is the inverse — scoped to one pot, returns `{ [accountId]: number }` showing how much each account contributed to that pot's current `saved` amount. Used by the fulfill-goal flow.
 
 **`fmt(n)`** formats numbers as Indian Rupee strings (₹, `en-IN` locale).
 
@@ -92,8 +94,8 @@ accounts.map(acc => ({
 |-----|-----------|-------------|
 | Overview | `OverviewTab` | Spending summary, goals breakdown, accounts breakdown |
 | Pots | `PotsTab` | Active pots (saved < target). Completed pots show a 3-second celebration then move to Completed tab |
-| Completed | `CompletedTab` | Pots where saved ≥ target. Allows reset (saved → 0) or delete |
-| Accounts | `AccountsTab` | Account cards with committed/free amounts. Deficit resolution on balance edit |
+| Completed | `CompletedTab` | Pots where saved ≥ target. Allows **Mark as Spent** (deducts from source accounts + deletes pot), reset (saved → 0), or delete |
+| Accounts | `AccountsTab` | Account cards with committed/free amounts. Deficit resolution on balance edit. Expandable per-account balance history panel |
 | History | `HistoryTab` | Transaction log |
 
 ### Pot deadlines
@@ -114,15 +116,36 @@ When a user edits an account balance to less than the committed amount, `Account
 - **B — Proportional:** reduce each affected pot's `saved` proportionally based on its share
 - **C — Newest first:** absorb deficit from most recently funded pot first
 
+### Account balance history
+
+Every balance change is logged to `users/{uid}/accounts/{accId}/history/` with a reason. This gives an audit trail without changing the core model (balance is still stored as an absolute value on the account document).
+
+`AccountModal` shows a reason dropdown when editing (not when adding):
+- **Salary / Deposit** → `credit`
+- **Expense / Withdrawal** → `debit`
+- **Sync with bank** → `correction`
+- **Goal fulfilled** → `goal_fulfilled` (written automatically by the fulfill flow, not selectable by user)
+
+`AccountsTab` has a "History" toggle per account card that opens an inline panel with the 20 most recent entries (live `onSnapshot` subscription, scoped per account).
+
+### Fulfill goal flow
+
+When a completed pot is marked as spent ("Mark as Spent" in `CompletedTab`):
+1. `getPotContributions` determines which accounts funded the pot and by how much
+2. `FulfillModal` shows the breakdown for confirmation
+3. On confirm: `updateAccountWithHistory` reduces each source account's balance and writes a `goal_fulfilled` history entry; `deletePot` removes the pot
+4. Net effect: `effectiveBalance` stays the same (committed removed, raw balance reduced by equal amount) but now correctly reflects reality
+
 ### Firestore schema
 
 All collections live under `users/{userId}/`:
 
 - **pots:** `{ name, target, saved, icon (emoji), color (hex), deadline (ISO string | null), createdAt }`
 - **accounts:** `{ name, bank, type ('salary'|'savings'), balance, minBalance, createdAt }`
+- **accounts/{accId}/history:** `{ type ('credit'|'debit'|'correction'|'goal_fulfilled'), delta (signed), newBalance, note (optional), createdAt }`
 - **transactions:** `{ potId, potName, amount, sources: [{accountId, accountName, deduct}], createdAt }`
 
-Security rules in `firestore.rules` ensure each user can only access their own data.
+Security rules in `firestore.rules` ensure each user can only access their own data. The `history` subcollection needs an explicit rule added if rules are path-specific (not wildcard).
 
 ### Styling
 

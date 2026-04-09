@@ -126,3 +126,22 @@ export function getAccountContributions(
 
   return { contributions, order }
 }
+
+/**
+ * Returns how much each account contributed to a single pot's current saved amount.
+ * Walks transactions newest-first, stops once pot.saved is fully explained.
+ */
+export function getPotContributions(pot: Pot, transactions: Transaction[]): Record<string, number> {
+  let toExplain = pot.saved
+  const result: Record<string, number> = {}
+  for (const txn of transactions) {
+    if (txn.potId !== pot.id || toExplain <= 0) continue
+    const contribution = Math.min(txn.amount, toExplain)
+    const scale = txn.amount > 0 ? contribution / txn.amount : 0
+    for (const s of txn.sources ?? []) {
+      result[s.accountId] = (result[s.accountId] || 0) + s.deduct * scale
+    }
+    toExplain -= contribution
+  }
+  return result
+}

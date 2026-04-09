@@ -1,9 +1,9 @@
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, orderBy, serverTimestamp,
+  onSnapshot, query, orderBy, serverTimestamp, limit,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import type { Pot, Account, Transaction } from '../types'
+import type { Pot, Account, Transaction, AccountHistoryEntry } from '../types'
 
 type Unsubscribe = () => void
 
@@ -70,4 +70,44 @@ export function subscribeTransactions(uid: string, cb: (transactions: Transactio
   return onSnapshot(q, snap =>
     cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)))
   )
+}
+
+// ── Account History ───────────────────────────────────────────────────────────
+
+export function addAccountHistory(
+  uid: string,
+  accId: string,
+  entry: Omit<AccountHistoryEntry, 'id' | 'createdAt'>,
+) {
+  return addDoc(
+    collection(db, 'users', uid, 'accounts', accId, 'history'),
+    { ...entry, createdAt: serverTimestamp() },
+  )
+}
+
+export function subscribeAccountHistory(
+  uid: string,
+  accId: string,
+  cb: (entries: AccountHistoryEntry[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, 'users', uid, 'accounts', accId, 'history'),
+    orderBy('createdAt', 'desc'),
+    limit(20),
+  )
+  return onSnapshot(q, snap =>
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as AccountHistoryEntry)))
+  )
+}
+
+export async function updateAccountWithHistory(
+  uid: string,
+  accId: string,
+  data: Partial<Account>,
+  entry: Omit<AccountHistoryEntry, 'id' | 'createdAt'>,
+) {
+  await Promise.all([
+    updateAccount(uid, accId, data),
+    addAccountHistory(uid, accId, entry),
+  ])
 }
