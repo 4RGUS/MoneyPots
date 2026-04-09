@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import type { User } from 'firebase/auth'
 import { useAuth } from '../hooks/useAuth'
-import { subscribePots, subscribeAccounts, subscribeTransactions } from '../lib/db'
+import { subscribePots, subscribeAccounts, subscribeTransactions, updateAccountWithHistory, updatePot } from '../lib/db'
 import { computeCommitted } from '../lib/allocation'
 import type { Pot, Account, EffectiveAccount, Transaction } from '../types'
 import PotsTab from '../components/PotsTab'
@@ -39,7 +39,7 @@ export default function Dashboard({ user }: { user: User }) {
   }, [user.uid])
 
   const effectiveAccounts = useMemo((): EffectiveAccount[] => {
-    const committed = computeCommitted(pots, transactions)
+    const committed = computeCommitted(pots.filter(p => p.status !== 'fulfilled'), transactions)
     return accounts.map(acc => ({
       ...acc,
       rawBalance: acc.balance,
@@ -59,6 +59,23 @@ export default function Dashboard({ user }: { user: User }) {
     const activePotIds = new Set(latestPots.filter(p => p.saved > 0).map(p => p.id))
     const hasOverviewData = latestTxns.some(txn => activePotIds.has(txn.potId))
     if (!hasOverviewData) setActiveTab('Pots')
+  }
+
+  async function handleFulfill(pot: Pot, contributions: Record<string, number>) {
+    const writes: Promise<unknown>[] = []
+    for (const [accId, amount] of Object.entries(contributions)) {
+      const acc = accounts.find(a => a.id === accId)
+      if (!acc || amount <= 0) continue
+      const newBalance = acc.balance - amount
+      writes.push(updateAccountWithHistory(user.uid, accId, { balance: newBalance }, {
+        type: 'goal_fulfilled',
+        delta: -amount,
+        newBalance,
+        note: pot.name,
+      }))
+    }
+    writes.push(updatePot(user.uid, pot.id, { status: 'fulfilled' }))
+    await Promise.all(writes)
   }
 
   const completedCount = completedPots.length
@@ -96,7 +113,13 @@ export default function Dashboard({ user }: { user: User }) {
           <PotsTab uid={user.uid} pots={pots} accounts={effectiveAccounts} />
         )}
         {activeTab === 'Completed' && (
-          <CompletedTab uid={user.uid} pots={completedPots} />
+          <CompletedTab
+            uid={user.uid}
+            pots={completedPots}
+            accounts={accounts}
+            transactions={transactions}
+            onFulfill={handleFulfill}
+          />
         )}
         {activeTab === 'Accounts' && (
           <AccountsTab uid={user.uid} accounts={effectiveAccounts} pots={pots} transactions={transactions} />

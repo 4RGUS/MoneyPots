@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import type { Account, EffectiveAccount } from '../types'
+import type { Account, EffectiveAccount, AccountHistoryType } from '../types'
 
 type AccountFormData = Omit<Account, 'id' | 'createdAt'>
 
 interface AccountModalProps {
   title: string
   initial?: Account | EffectiveAccount
-  onSave: (data: AccountFormData) => Promise<void>
+  onSave: (data: AccountFormData, historyType: AccountHistoryType, note: string) => Promise<void>
   onClose: () => void
 }
 
@@ -19,18 +19,24 @@ export default function AccountModal({ title, initial, onSave, onClose }: Accoun
     ('rawBalance' in (initial ?? {}) ? (initial as EffectiveAccount).rawBalance : initial?.balance) ?? ''
   )
   const [minBalance, setMinBalance] = useState<number | ''>(initial?.minBalance ?? '')
+  const [historyType, setHistoryType] = useState<AccountHistoryType>('correction')
+  const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleSave() {
     if (!name.trim() || !bank.trim() || balance === '') return
     setLoading(true)
-    await onSave({
-      name: name.trim(),
-      bank: bank.trim(),
-      type,
-      balance: parseFloat(String(balance)) || 0,
-      minBalance: type === 'savings' ? (parseFloat(String(minBalance)) || 0) : 0,
-    })
+    await onSave(
+      {
+        name: name.trim(),
+        bank: bank.trim(),
+        type,
+        balance: parseFloat(String(balance)) || 0,
+        minBalance: type === 'savings' ? (parseFloat(String(minBalance)) || 0) : 0,
+      },
+      initial ? historyType : 'credit',
+      note,
+    )
     setLoading(false)
   }
 
@@ -78,6 +84,27 @@ export default function AccountModal({ title, initial, onSave, onClose }: Accoun
             placeholder="e.g. 85000"
           />
         </div>
+
+        {initial && (
+          <>
+            <div className="field">
+              <label>Reason for balance change</label>
+              <select value={historyType} onChange={e => setHistoryType(e.target.value as AccountHistoryType)}>
+                <option value="credit">Salary / Deposit</option>
+                <option value="debit">Expense / Withdrawal</option>
+                <option value="correction">Sync with bank</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Note (optional)</label>
+              <input
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="e.g. April salary credited"
+              />
+            </div>
+          </>
+        )}
 
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
